@@ -267,7 +267,7 @@
             Media Sosial
           </div>
           <div class="social-links">
-            <a href="#" class="social-link" title="Instagram">
+            <a href="https://www.instagram.com/ptrragrr/" class="social-link" title="Instagram">
               <img src="{{ asset('images/ig.png') }}" alt="Instagram" style="width: 24px; height: 24px;">
             </a>
             <!-- <a href="#" class="social-link" title="WhatsApp">

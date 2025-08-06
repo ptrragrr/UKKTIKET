@@ -3,36 +3,51 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use App\Models\Ticket;
 
 class CheckoutController extends Controller
 {
-    public function index(Request $request)
-    {
-        return view('checkout'); // Buat view checkout.blade.php
+   public function index(Request $request)
+{
+    $ticketsData = json_decode($request->input('tickets'), true);
+
+    if (!$ticketsData || count($ticketsData) === 0) {
+        return redirect()->route('home')->with('error', 'Silakan pilih tiket terlebih dahulu.');
     }
 
-    public function storeGuest(Request $request)
-{
-    // Validasi input
-    $validated = $request->validate([
-        'nama_pembeli' => 'required|string|max:255',
-        'email' => 'required|email',
-        'konser_id' => 'required|exists:konser,id',
-        'jumlah' => 'required|integer|min:1',
-        'metode_pembayaran' => 'required|string',
-    ]);
+    $ticketIds = array_column($ticketsData, 'id');
+    $tickets = Ticket::with('konser')->whereIn('id', $ticketIds)->get();
 
-    // Simpan data ke tabel transaksi (atau yang sesuai)
-    $transaksi = \App\Models\Transaksi::create([
-        'nama_pembeli' => $validated['nama_pembeli'],
-        'email' => $validated['email'],
-        'konser_id' => $validated['konser_id'],
-        'jumlah' => $validated['jumlah'],
-        'metode_pembayaran' => $validated['metode_pembayaran'],
-        'status' => 'pending',
-    ]);
+    if ($tickets->isEmpty()) {
+        return redirect()->route('home')->with('error', 'Tiket tidak ditemukan.');
+    }
 
-    // Redirect atau tampilkan view konfirmasi
-    return redirect()->route('transaksi.success')->with('success', 'Pembayaran berhasil diproses!');
+    // ✅ Ambil tiket dan konser pertama
+    $ticket = $tickets->first();
+    $konser = $ticket->konser;
+
+    // ✅ Hitung ulang jumlah, harga, pajak, fee, total
+    $jumlah = $ticketsData[0]['qty'] ?? 1; // default 1 jika tidak ada
+    $harga = $ticket->harga_tiket;
+
+    $tax = $harga * $jumlah * 0.10;
+    $platformFee = $harga * $jumlah * 0.05;
+    $total = ($harga * $jumlah) + $tax + $platformFee;
+
+    return view('checkout', [
+        'tickets' => $tickets,
+        'konser' => $konser,
+        'jumlah' => $jumlah,
+        'harga' => $harga,
+        'tax' => $tax,
+        'platformFee' => $platformFee,
+        'total' => $total,
+        'ticketsData' => $ticketsData
+    ]);
 }
+
+    public function storeGuest(Request $request)
+    {
+        // proses simpan transaksi tamu
+    }
 }

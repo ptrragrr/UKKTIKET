@@ -485,7 +485,7 @@
     <div class="ticket-list">
       @foreach($tickets as $ticket)
         <div class="ticket-card" data-id="{{ $ticket->id }}" data-price="{{ $ticket->harga_tiket }}" data-stock="{{ $ticket->stok_tiket }}">
-          <h3>{{ $ticket->jenis_tiket }}</h3>
+          <h3>{{ $ticket->konser->nama_konser }} - {{ $ticket->jenis_tiket }}</h3>
           <p class="ticket-description">Stok tersedia: {{ $ticket->stok_tiket }}</p>
           <div class="ticket-price">Rp {{ number_format($ticket->harga_tiket, 0, ',', '.') }}</div>
           <div class="qty-control">
@@ -513,7 +513,7 @@
       <div class="summary-total">
         Total: <span id="total">Rp 0</span>
       </div>
-      <form id="checkout-form" action="{{ route('checkout.show') }}" method="GET">
+      <form id="checkout-form" action="{{ route('checkout.page') }}" method="GET">
   @csrf
   <!-- <div class="mb-3">
     <label for="nama_pembeli">Nama Pembeli</label>
