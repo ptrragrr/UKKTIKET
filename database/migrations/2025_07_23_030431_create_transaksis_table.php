@@ -12,17 +12,15 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('transaksis', function (Blueprint $table) {
-    $table->id();
-    $table->foreignId('user_id')->constrained()->onDelete('cascade');
-    $table->string('kode_transaksi')->unique();
-    $table->enum('status', ['pending', 'paid', 'cancelled'])->default('pending');
-    $table->enum('metode_pembayaran', ['dana', 'ovo', 'gopay', 'bca', 'bri'])->nullable();
-    $table->integer('subtotal');
-    $table->integer('tax')->default(0);
-    $table->integer('platform_fee')->default(0);
-    $table->integer('total_bayar');
-    $table->timestamps();
-});
+            $table->id();
+            $table->string('nama_pembeli');
+            $table->string('email');
+            $table->string('nomer_telpon');
+            $table->string('kode_transaksi')->unique();
+            $table->enum('status_payment', ['pending', 'paid', 'cancelled'])->default('pending');
+            $table->integer('total_harga'); // ✅ tambahan total harga
+            $table->timestamps();
+        });
     }
 
     /**

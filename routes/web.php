@@ -5,6 +5,7 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\PilihTiketController;
 use App\Http\Controllers\MitransController;
+use App\Http\Controllers\PaymentController;
 
 // ====================
 // PUBLIC ROUTES
@@ -18,6 +19,9 @@ Route::get('/checkout', [CheckoutController::class, 'index'])->name('checkout.pa
 // Route::get('/checkout', [OrderController::class, 'index'])->name('checkout.page');
 Route::post('/checkout', [CheckoutController::class, 'storeGuest'])->name('transaksi.guest.store');
 Route::post('/checkout/snap', [CheckoutController::class, 'createCharge']);
+Route::get('/checkout/{konserId}', [CheckoutController::class, 'showCheckout']);
+// Route::post('/pay', [CheckoutController::class, 'pay']); 
+// Route::post('/transaksi/update-status', [CheckoutController::class, 'updateStatus']);
 // Route::post('/checkout/pay', [CheckoutController::class, 'payWithXendit'])->name('checkout.pay');
 // Route::get('/checkout/success', [CheckoutController::class, 'success'])->name('checkout.success');
 // Route::get('/checkout/failed', [CheckoutController::class, 'failed'])->name('checkout.failed');
@@ -26,8 +30,12 @@ Route::post('/checkout/snap', [CheckoutController::class, 'createCharge']);
 // })->name('checkout.show');
 
 
-Route::post('/pay', [\App\Http\Controllers\CheckoutController::class, 'pay'])->name('checkout.pay');
+Route::post('/pay', [CheckoutController::class, 'pay'])->name('checkout.pay');
 Route::post('/midtrans/callback', [CheckoutController::class, 'callback'])->name('midtrans.callback');
+
+Route::post('/payment/create', [PaymentController::class, 'createTransaction']);
+Route::post('/midtrans/notification', [PaymentController::class, 'notificationHandler']);
+Route::post('/transaksi/update-status', [CheckoutController::class, 'updateStatus'])->name('transaksi.updateStatus');
 
 
 // ====================

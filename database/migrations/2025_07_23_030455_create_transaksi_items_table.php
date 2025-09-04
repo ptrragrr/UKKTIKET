@@ -12,13 +12,13 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('transaksi_items', function (Blueprint $table) {
-    $table->id();
-    $table->foreignId('transaksi_id')->constrained('transaksis')->onDelete('cascade');
-    $table->foreignId('tiket_id')->constrained('tikets')->onDelete('cascade');
-    $table->integer('jumlah');
-    $table->integer('harga_satuan'); // disimpan agar tidak berubah jika harga tiket diubah
-    $table->timestamps();
-});
+            $table->id();
+            $table->foreignId('transaksi_id')->constrained('transaksis')->onDelete('cascade');
+            $table->foreignId('ticket_id')->constrained('tikets')->onDelete('cascade');
+            $table->integer('jumlah');
+            $table->integer('sub_total');
+            $table->timestamps();
+        });
     }
 
     /**

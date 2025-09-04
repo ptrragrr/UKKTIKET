@@ -6,12 +6,13 @@ use Illuminate\Database\Eloquent\Model;
 
 class TransaksiDetail extends Model
 {
-    protected $table = 'transaksi_detail'; // nama tabel kamu
+    protected $table = 'transaksi_details'; // nama tabel kamu
     protected $fillable = [
         'transaksi_id',
         'ticket_id',
         'jumlah',
-        'harga',
+        'harga_satuan',
+        'total_harga',
     ];
 
     public function transaksi()

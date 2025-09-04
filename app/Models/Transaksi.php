@@ -1,6 +1,6 @@
 <?php
 
-namespace  App\Models\Transaksi;
+namespace  App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -9,15 +9,15 @@ class Transaksi extends Model
 {
     use HasFactory;
 
-    protected $table = 'transaksi';
+    protected $table = 'transaksis';
 
     protected $fillable = [
-        'user_id',
+        'nama_pembeli',
+        'email',
+        'nomer_telpon',
         'kode_transaksi',
-        'metode_pembayaran',
         'total_harga',
-        'bayar',
-        'status',
+        'status_payment',
     ];
 
     // 🔁 Relasi ke user (pembeli)

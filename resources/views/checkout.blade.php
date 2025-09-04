@@ -24,15 +24,25 @@
         <input type="tel" id="telepon" name="telepon" class="form-control" required>
       </div>
 
-      {{-- Data Tiket (dari Controller) --}}
-      <input type="hidden" id="konser_id" name="konser_id" value="{{ $konser->id }}">
-      <input type="hidden" id="jumlah" name="jumlah" value="{{ $jumlah }}">
+      {{-- Hidden: tickets[] --}}
+      @foreach($keranjang as $i => $item)
+        <input type="hidden" name="tickets[{{ $i }}][id]" value="{{ $item['ticket']->id }}">
+        <input type="hidden" name="tickets[{{ $i }}][qty]" value="{{ $item['qty'] }}">
+      @endforeach
+
       <input type="hidden" id="metode_pembayaran" name="metode_pembayaran" value="snap">
 
       {{-- Ringkasan Pembelian --}}
+      @foreach($keranjang as $item)
+        <div class="summary-item">
+          <span>{{ $item['ticket']->konser->nama_konser }} - {{ $item['ticket']->jenis_tiket }}</span>
+          <span>Rp {{ number_format($item['ticket']->harga_tiket, 0, ',', '.') }} × {{ $item['qty'] }}</span>
+        </div>
+      @endforeach
+
       <div class="summary-item">
-        <span>Tiket: {{ $konser->nama_konser }}</span>
-        <span>Rp {{ number_format($harga, 0, ',', '.') }} × {{ $jumlah }}</span>
+        <span>Subtotal</span>
+        <span>Rp {{ number_format($subtotal, 0, ',', '.') }}</span>
       </div>
       <div class="summary-item">
         <span>Tax (10%)</span>
@@ -46,7 +56,6 @@
         <strong>Total Bayar:</strong> Rp {{ number_format($total, 0, ',', '.') }}
       </div>
 
-      {{-- Tombol Aksi --}}
       <div class="button-group">
         <button type="button" class="btn-pay" onclick="startPayment()">Bayar Sekarang</button>
         <button type="button" class="btn-cancel" onclick="window.location.href='{{ url('/') }}'">Batal</button>
@@ -55,23 +64,37 @@
   </div>
 </div>
 
-{{-- Midtrans Snap JS (Sandbox) --}}
+{{-- Midtrans Snap JS --}}
 <script src="https://app.sandbox.midtrans.com/snap/snap.js"
         data-client-key="{{ config('midtrans.client_key') }}"></script>
 
 <script>
   function startPayment() {
+    const form = document.getElementById('checkout-form');
+    const fd = new FormData(form);
+    // Bangun array tickets dari FormData
+    const tickets = [];
+    for (let pair of fd.entries()) {
+      const key = pair[0];
+      const val = pair[1];
+      const m = key.match(/tickets\[(\d+)\]\[(.+)\]/);
+      if (m) {
+        const idx = parseInt(m[1], 10);
+        const k = m[2];
+        tickets[idx] = tickets[idx] || {};
+        tickets[idx][k] = k === 'qty' ? parseInt(val, 10) : val;
+      }
+    }
+
     const payload = {
-      nama_pembeli: document.getElementById('nama_pembeli').value,
-      email: document.getElementById('email').value,
-      telepon: document.getElementById('telepon').value,
-      konser_id: document.getElementById('konser_id').value,
-      jumlah: parseInt(document.getElementById('jumlah').value, 10),
-      // Wajib karena validasi controller kamu butuh field ini
-      metode_pembayaran: document.getElementById('metode_pembayaran').value || 'snap',
+      nama_pembeli: fd.get('nama_pembeli'),
+      email: fd.get('email'),
+      telepon: fd.get('telepon'),
+      tickets: tickets,
+      metode_pembayaran: fd.get('metode_pembayaran')
     };
 
-    fetch("{{ url('/pay') }}", {
+    fetch("{{ route('checkout.pay') }}", {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -79,27 +102,49 @@
       },
       body: JSON.stringify(payload)
     })
-    .then(async (res) => {
-      const data = await res.json();
-      if (!res.ok) {
-        alert(data.message || 'Gagal membuat transaksi.');
-        throw new Error(data.message || 'Request failed');
+    .then(res => res.json().then(body => ({ ok: res.ok, body })))
+    .then(({ ok, body }) => {
+      if (!ok) {
+        alert(body.message || body.body || 'Gagal membuat transaksi');
+        return;
       }
-      return data;
-    })
-    .then((data) => {
-      if (data.token) {
-        snap.pay(data.token, {
-          onSuccess: function(){ window.location.href = '/?success=true'; },
-          onPending: function(){ window.location.href = '/?pending=true'; },
-          onError: function(){ alert('Pembayaran gagal. Silakan coba lagi.'); },
-          onClose: function(){ /* optional */ }
+      if (body.token) {
+        snap.pay(body.token, {
+          onSuccess: function(result) {
+            // update status ke server
+            fetch("{{ route('transaksi.updateStatus') }}", {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': '{{ csrf_token() }}'
+              },
+              body: JSON.stringify({
+                order_id: body.order_id,
+                status: 'paid',
+                bayar: result.gross_amount
+              })
+            }).then(()=> {
+              window.location.href = '/?success=true';
+            });
+          },
+          onPending: function(result) {
+            window.location.href = '/?pending=true';
+          },
+          onError: function(err) {
+            alert('Pembayaran gagal. Coba lagi.');
+          },
+          onClose: function() {
+            // user close snap modal
+          }
         });
       } else {
         alert('Gagal mendapatkan token pembayaran.');
       }
     })
-    .catch((err) => console.error(err));
+    .catch(err => {
+      console.error(err);
+      alert('Terjadi kesalahan.');
+    });
   }
 </script>
 

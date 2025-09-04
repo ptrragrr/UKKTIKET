@@ -530,7 +530,7 @@
     🛒 Checkout (0 tiket)
   </button>
 </form>
-      <!-- <form id="checkout-form" action="{{ route('transaksi.guest.store') }}" method="POST">
+      {{-- <form id="checkout-form" action="{{ route('transaksi.guest.store') }}" method="POST">
         @csrf
         <input type="hidden" name="tickets" id="ticket-data" value="">
         <input type="hidden" name="subtotal" id="subtotal-data" value="0">
@@ -540,7 +540,7 @@
         <button type="submit" class="btn-checkout" id="checkout-btn" disabled>
           🛒 Checkout (0 tiket)
         </button>
-      </form> -->
+      </form> --}}
     </div>
   </div>
 </div>
