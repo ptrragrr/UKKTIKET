@@ -15,6 +15,7 @@ Route::get('/send-test/{id}', function ($id) {
     return "✅ Email test terkirim ke " . $trx->email;
 });
 
+// Route::get('/', [HomeController::class, 'index']);
 // ====================
 // PUBLIC ROUTES
 // ====================
@@ -41,7 +42,8 @@ Route::post('/midtrans/callback', [CheckoutController::class, 'callback'])->name
 Route::post('/payment/create', [PaymentController::class, 'createTransaction']);
 Route::post('/midtrans/notification', [PaymentController::class, 'notificationHandler']);
 Route::post('/transaksi/update-status', [CheckoutController::class, 'updateStatus'])->name('transaksi.updateStatus');
-
+Route::get('/tiket/{id}', [CheckoutController::class, 'showTiket'])
+    ->name('tiket.show');
 
 // ====================
 // NON-AUTH Routes (hapus auth middleware karena tidak pakai login)

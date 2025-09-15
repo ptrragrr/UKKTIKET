@@ -427,4 +427,10 @@ public function success(Request $request)
             'message' => "Status transaksi {$orderId} berhasil diubah menjadi {$status}"
         ]);
     }
+    public function showTiket($id)
+{
+    $transaksi = \App\Models\Transaksi::with('detailTransaksi.ticket')->findOrFail($id);
+
+    return view('tiket.show', compact('transaksi'));
+}
 }

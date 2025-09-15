@@ -38,12 +38,17 @@
 
         <p>Kamu bisa menunjukkan email ini saat check-in konser.</p>
 
-        <a href="{{ url('/') }}" class="btn">Lihat Event</a>
+        {{-- <a href="{{ url('/') }}" class="btn">Lihat Event</a> --}}
+    {{-- <a href="{{ route('tiket.show', $transaksi->id) }}" 
+   style="display:inline-block;padding:10px 20px;background:#007bff;color:#fff;text-decoration:none;border-radius:5px;">
+   Lihat Tiket
+</a> --}}
+
 
         <div class="footer">
             <p>Jika kamu merasa tidak melakukan pembelian ini, abaikan email ini.</p>
             <p>&copy; {{ date('Y') }} Tiket Konser. All rights reserved.</p>
         </div>
-    </div>
+    </div>  
 </body>
 </html>
