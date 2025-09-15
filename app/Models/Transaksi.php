@@ -18,6 +18,7 @@ class Transaksi extends Model
         'kode_transaksi',
         'total_harga',
         'status_payment',
+        'kode_tiket',
     ];
 
     // 🔁 Relasi ke user (pembeli)

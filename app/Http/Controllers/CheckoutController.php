@@ -3,14 +3,19 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Mail;
 use App\Models\Ticket;
 use App\Models\Transaksi;
 use App\Models\TransaksiDetail;
 use Midtrans\Config;
 use Midtrans\Snap;
+use Midtrans\Transaction;
+use App\Mail\TicketPaidMail;
+use SimpleSoftwareIO\QrCode\Facades\QrCode;
+use Picqer\Barcode\BarcodeGeneratorPNG;
 
 class CheckoutController extends Controller
 {
@@ -27,7 +32,6 @@ class CheckoutController extends Controller
      */
     public function index(Request $request)
     {
-        // Ambil tiket dari request atau session
         $ticketsData = $request->input('tickets', session('cart', []));
         if (is_string($ticketsData)) {
             $ticketsData = json_decode($ticketsData, true);
@@ -37,7 +41,6 @@ class CheckoutController extends Controller
             return redirect()->route('home')->with('error', 'Silakan pilih tiket terlebih dahulu.');
         }
 
-        // Normalisasi data tickets
         $normalized = [];
         foreach ($ticketsData as $row) {
             $id = $row['id'] ?? $row['ticket_id'] ?? $row['konser_id'] ?? null;
@@ -51,7 +54,6 @@ class CheckoutController extends Controller
             return redirect()->route('home')->with('error', 'Tidak ada tiket valid yang dipilih.');
         }
 
-        // Ambil tiket dari DB
         $ids = array_unique(array_column($normalized, 'id'));
         $tickets = Ticket::with('konser')->whereIn('id', $ids)->get()->keyBy('id');
 
@@ -97,10 +99,9 @@ class CheckoutController extends Controller
             'tickets' => 'required|array|min:1',
             'tickets.*.id' => 'required|integer|exists:tickets,id',
             'tickets.*.qty' => 'required|integer|min:1',
-            'metode_pembayaran' => 'nullable|string',
+            // 'metode_pembayaran' => 'nullable|string',
         ]);
 
-        // Ambil tiket dari DB
         $ticketIds = array_unique(array_map(fn($t) => (int)$t['id'], $payload['tickets']));
         $tickets = Ticket::with('konser')->whereIn('id', $ticketIds)->get()->keyBy('id');
 
@@ -163,7 +164,7 @@ class CheckoutController extends Controller
                 'email' => $request->email,
                 'nomer_telpon' => $request->telepon,
                 'kode_transaksi' => $orderId,
-                'metode_pembayaran' => $request->metode_pembayaran ?? 'midtrans',
+                // 'metode_pembayaran' => $request->metode_pembayaran ?? 'midtrans',
                 'total_harga' => $grandTotal,
                 'status_payment' => 'pending',
             ]);
@@ -193,6 +194,9 @@ class CheckoutController extends Controller
                     'email' => $payload['email'],
                     'phone' => $payload['telepon'],
                 ],
+                'callbacks' => [
+                    'finish' => route('checkout.callback')
+                ]
             ];
 
             $snapToken = Snap::getSnapToken($params);
@@ -206,14 +210,125 @@ class CheckoutController extends Controller
             ]);
         } catch (\Throwable $e) {
             DB::rollBack();
-            \Log::error('pay error: '.$e->getMessage());
+            Log::error('pay error: '.$e->getMessage());
             return response()->json(['error' => true, 'message' => 'Gagal membuat transaksi.'], 500);
         }
     }
 
     /**
-     * Update status transaksi (webhook / frontend callback)
+     * Callback dari frontend setelah pembayaran
      */
+    public function callback(Request $request)
+    {
+        $orderId = $request->input('order_id');
+        if (!$orderId) {
+            return redirect()->route('home')->with('error', 'Order ID tidak ditemukan.');
+        }
+
+        try {
+            $status = Transaction::status($orderId);
+            $this->updateTransactionStatus($orderId, $status->transaction_status, $status->gross_amount);
+
+            if (in_array($status->transaction_status, ['capture', 'settlement'])) {
+                return redirect()->route('checkout.success', ['order_id' => $orderId]);
+            } else {
+                return redirect()->route('checkout.failed', ['order_id' => $orderId]);
+            }
+
+        } catch (\Exception $e) {
+            Log::error('Callback error: ' . $e->getMessage());
+            return redirect()->route('home')->with('error', 'Terjadi kesalahan saat memproses pembayaran.');
+        }
+    }
+
+    /**
+     * Webhook dari Midtrans
+     */
+    public function webhook(Request $request)
+    {
+        try {
+            $payload = $request->getContent();
+            $notification = json_decode($payload, true);
+
+            Log::info('Midtrans webhook received', $notification);
+
+            if (!isset($notification['order_id']) || !isset($notification['transaction_status'])) {
+                return response()->json(['message' => 'Invalid notification'], 400);
+            }
+
+            $serverKey = Config::$serverKey;
+            $hashed = hash('sha512', $notification['order_id'] . $notification['status_code'] . $notification['gross_amount'] . $serverKey);
+
+            if ($hashed !== $notification['signature_key']) {
+                return response()->json(['message' => 'Invalid signature'], 401);
+            }
+
+            $this->updateTransactionStatus(
+                $notification['order_id'],
+                $notification['transaction_status'],
+                $notification['gross_amount']
+            );
+
+            return response()->json(['message' => 'OK']);
+
+        } catch (\Exception $e) {
+            Log::error('Webhook error: ' . $e->getMessage());
+            return response()->json(['message' => 'Server Error'], 500);
+        }
+    }
+
+    /**
+     * Update status transaksi
+     */
+    private function updateTransactionStatus($orderId, $status, $amount = null)
+    {
+        $transaksi = Transaksi::where('kode_transaksi', $orderId)->first();
+
+        if (!$transaksi) {
+            Log::warning("Transaksi tidak ditemukan: {$orderId}");
+            return;
+        }
+
+        $statusMap = [
+            'pending' => 'pending',
+            'settlement' => 'paid',
+            'capture' => 'paid',
+            'cancel' => 'cancelled',
+            'deny' => 'cancelled',
+            'failure' => 'cancelled',
+            'expire' => 'cancelled',
+        ];
+
+        $newStatus = $statusMap[strtolower($status)] ?? $status;
+
+        $updateData = ['status_payment' => $newStatus];
+        if ($amount) {
+            $updateData['bayar'] = $amount;
+        }
+
+        $previousStatus = $transaksi->status_payment;
+        $transaksi->update($updateData);
+
+        if ($newStatus === 'paid' && $previousStatus !== 'paid') {
+            foreach ($transaksi->details as $detail) {
+                $ticket = Ticket::find($detail->ticket_id);
+                if ($ticket && $ticket->stok_tiket >= $detail->jumlah) {
+                    $ticket->decrement('stok_tiket', $detail->jumlah);
+                }
+            }
+
+            // ✅ Kirim email setelah pembayaran berhasil
+            try {
+                Mail::to($transaksi->email)->send(new TicketPaidMail($transaksi));
+                Log::info("Email tiket berhasil dikirim ke {$transaksi->email}");
+            } catch (\Exception $e) {
+                Log::error("Gagal kirim email ke {$transaksi->email}: " . $e->getMessage());
+            }
+        }
+
+        Log::info("Status transaksi {$orderId} diubah menjadi {$newStatus}");
+    }
+
     public function updateStatus(Request $request)
     {
         $request->validate([
@@ -222,37 +337,94 @@ class CheckoutController extends Controller
             'bayar' => 'nullable|numeric'
         ]);
 
-        $transaksi = Transaksi::where('kode_transaksi', $request->order_id)->first();
-        if (!$transaksi) {
-            return response()->json(['error' => true, 'message' => 'Transaksi tidak ditemukan.'], 404);
-        }
-
-        $map = [
-            'pending' => 'pending',
-            'settlement' => 'paid',
-            'capture' => 'paid',
-            'cancel' => 'cancelled',
-            'deny' => 'cancelled',
-            'failure' => 'cancelled',
-            'expire' => 'cancelled',
-            'paid' => 'paid'
-        ];
-
-        $status = strtolower($request->status);
-        $to = $map[$status] ?? $status;
-
-        $transaksi->update([
-            'status' => $to,
-            'bayar' => $request->input('bayar', $transaksi->bayar)
-        ]);
-
-        if ($to === 'paid') {
-            foreach ($transaksi->details as $d) {
-                $t = Ticket::find($d->ticket_id);
-                if ($t) $t->decrement('stok_tiket', $d->qty);
-            }
-        }
+        $this->updateTransactionStatus(
+            $request->order_id,
+            $request->status,
+            $request->bayar
+        );
 
         return response()->json(['success' => true]);
+    }
+
+    // public function success(Request $request)
+    // {
+    //     $orderId = $request->get('order_id');
+    //     $transaksi = Transaksi::where('kode_transaksi', $orderId)->first();
+
+    //     if (!$transaksi) {
+    //         return redirect()->route('home')->with('error', 'Transaksi tidak ditemukan.');
+    //     }
+
+    //     return view('checkout.success', compact('transaksi'));
+    // }
+
+public function success(Request $request)
+{
+    $orderId = $request->query('order_id');
+    $transaksi = Transaksi::where('kode_transaksi', $orderId)->first();
+
+    if (!$transaksi) {
+        return redirect()->route('home')->with('error', 'Transaksi tidak ditemukan.');
+    }
+
+    // ✅ Generate kode tiket unik per detail
+    foreach ($transaksi->details as $detail) {
+        if (!$detail->kode_tiket) {
+            $detail->kode_tiket = strtoupper(Str::random(8)); // misal: 8 karakter
+            $detail->save();
+        }
+    }
+
+    // Kirim email tiket tanpa QR/barcode
+    try {
+        Mail::to($transaksi->email)->send(
+            new \App\Mail\TicketPaidMail($transaksi)
+        );
+        Log::info("Email tiket berhasil dikirim ke {$transaksi->email}");
+    } catch (\Exception $e) {
+        Log::error("Gagal kirim email ke {$transaksi->email}: " . $e->getMessage());
+    }
+
+    return view('checkout.success', compact('transaksi'));
+}
+
+    public function failed(Request $request)
+    {
+        $orderId = $request->get('order_id');
+        $transaksi = Transaksi::where('kode_transaksi', $orderId)->first();
+
+        return view('checkout.failed', compact('transaksi', 'orderId'));
+    }
+
+    public function checkStatus($orderId)
+    {
+        try {
+            $status = Transaction::status($orderId);
+            $this->updateTransactionStatus($orderId, $status->transaction_status, $status->gross_amount);
+
+            $transaksi = Transaksi::where('kode_transaksi', $orderId)->first();
+
+            return response()->json([
+                'status' => $transaksi->status_payment,
+                'transaction_status' => $status->transaction_status,
+                'amount' => $status->gross_amount
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json(['error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function testUpdateStatus($orderId, $status = 'paid')
+    {
+        if (!app()->environment('local')) {
+            abort(404);
+        }
+
+        $this->updateTransactionStatus($orderId, $status);
+
+        return response()->json([
+            'message' => "Status transaksi {$orderId} berhasil diubah menjadi {$status}"
+        ]);
     }
 }

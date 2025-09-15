@@ -19,6 +19,7 @@ return new class extends Migration
             $table->string('kode_transaksi')->unique();
             $table->enum('status_payment', ['pending', 'paid', 'cancelled'])->default('pending');
             $table->integer('total_harga'); // ✅ tambahan total harga
+            // $table->string('kode_tiket', 20)->nullable()->after('total_harga');
             $table->timestamps();
         });
     }
