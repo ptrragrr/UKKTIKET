@@ -633,6 +633,7 @@
                     <h4>Virtual Account</h4>
                     <p>Bayar melalui ATM atau mobile banking</p>
                 </div>
+
             </div>
         </div>
     </section>
@@ -769,8 +770,7 @@
         <div class="container">
             <h3>OURSKY.FEST 2025</h3>
             <p>Festival musik bertema alam yang menginspirasi</p>
-            <p>Jakarta Pusat • 12 Oktober 2025</p>
-            <p>📧 tickets@ourskyfest.com | 📞 (021) 1234-5678</p>
+            <p>📧 ourskyfestival@gmail.com | 📞 (031) 1234-5678</p>
             <br>
             <p style="color: var(--warm-taupe); font-size: 0.9rem;">
                 © 2025 OURSKY.FEST. All rights reserved.
