@@ -273,7 +273,7 @@
             <!-- <a href="#" class="social-link" title="WhatsApp">
               <img src="{{ asset('images/wa.png') }}" alt="WhatsApp" style="width: 24px; height: 24px;">
             </a> -->
-            <a href="#" class="social-link" title="Twitter">
+            <a href="https://x.com/NCTsmtown_DREAM" class="social-link" title="Twitter">
               <img src="{{ asset('images/x.png') }}" alt="Twitter" style="width: 24px; height: 24px;">
             </a>
           </div>
