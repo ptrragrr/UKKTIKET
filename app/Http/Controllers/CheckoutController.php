@@ -14,8 +14,6 @@ use Midtrans\Config;
 use Midtrans\Snap;
 use Midtrans\Transaction;
 use App\Mail\TicketPaidMail;
-use SimpleSoftwareIO\QrCode\Facades\QrCode;
-use Picqer\Barcode\BarcodeGeneratorPNG;
 
 class CheckoutController extends Controller
 {
@@ -43,7 +41,7 @@ class CheckoutController extends Controller
 
         $normalized = [];
         foreach ($ticketsData as $row) {
-            $id = $row['id'] ?? $row['ticket_id'] ?? $row['konser_id'] ?? null;
+            $id = $row['id'] ?? $row['ticket_id'] ?? null;
             $qty = $row['qty'] ?? $row['jumlah'] ?? 1;
             if ($id) {
                 $normalized[] = ['id' => (int)$id, 'qty' => max(1, (int)$qty)];
@@ -55,7 +53,7 @@ class CheckoutController extends Controller
         }
 
         $ids = array_unique(array_column($normalized, 'id'));
-        $tickets = Ticket::with('konser')->whereIn('id', $ids)->get()->keyBy('id');
+        $tickets = Ticket::whereIn('id', $ids)->get()->keyBy('id');
 
         $keranjang = [];
         $subtotal = 0;
@@ -99,11 +97,10 @@ class CheckoutController extends Controller
             'tickets' => 'required|array|min:1',
             'tickets.*.id' => 'required|integer|exists:tickets,id',
             'tickets.*.qty' => 'required|integer|min:1',
-            // 'metode_pembayaran' => 'nullable|string',
         ]);
 
         $ticketIds = array_unique(array_map(fn($t) => (int)$t['id'], $payload['tickets']));
-        $tickets = Ticket::with('konser')->whereIn('id', $ticketIds)->get()->keyBy('id');
+        $tickets = Ticket::whereIn('id', $ticketIds)->get()->keyBy('id');
 
         $itemDetails = [];
         $subtotal = 0;
@@ -126,7 +123,7 @@ class CheckoutController extends Controller
                 'id' => (string)$ticket->id,
                 'price' => $price,
                 'quantity' => $qty,
-                'name' => "{$ticket->konser->nama_konser} - {$ticket->jenis_tiket}"
+                'name' => "{$ticket->nama_event} - {$ticket->jenis_tiket}" // ✅ pakai field langsung
             ];
         }
 
@@ -164,7 +161,6 @@ class CheckoutController extends Controller
                 'email' => $request->email,
                 'nomer_telpon' => $request->telepon,
                 'kode_transaksi' => $orderId,
-                // 'metode_pembayaran' => $request->metode_pembayaran ?? 'midtrans',
                 'total_harga' => $grandTotal,
                 'status_payment' => 'pending',
             ]);
@@ -317,7 +313,6 @@ class CheckoutController extends Controller
                 }
             }
 
-            // ✅ Kirim email setelah pembayaran berhasil
             try {
                 Mail::to($transaksi->email)->send(new TicketPaidMail($transaksi));
                 Log::info("Email tiket berhasil dikirim ke {$transaksi->email}");
@@ -346,47 +341,33 @@ class CheckoutController extends Controller
         return response()->json(['success' => true]);
     }
 
-    // public function success(Request $request)
-    // {
-    //     $orderId = $request->get('order_id');
-    //     $transaksi = Transaksi::where('kode_transaksi', $orderId)->first();
+    public function success(Request $request)
+    {
+        $orderId = $request->query('order_id');
+        $transaksi = Transaksi::where('kode_transaksi', $orderId)->first();
 
-    //     if (!$transaksi) {
-    //         return redirect()->route('home')->with('error', 'Transaksi tidak ditemukan.');
-    //     }
-
-    //     return view('checkout.success', compact('transaksi'));
-    // }
-
-public function success(Request $request)
-{
-    $orderId = $request->query('order_id');
-    $transaksi = Transaksi::where('kode_transaksi', $orderId)->first();
-
-    if (!$transaksi) {
-        return redirect()->route('home')->with('error', 'Transaksi tidak ditemukan.');
-    }
-
-    // ✅ Generate kode tiket unik per detail
-    foreach ($transaksi->details as $detail) {
-        if (!$detail->kode_tiket) {
-            $detail->kode_tiket = strtoupper(Str::random(8)); // misal: 8 karakter
-            $detail->save();
+        if (!$transaksi) {
+            return redirect()->route('home')->with('error', 'Transaksi tidak ditemukan.');
         }
-    }
 
-    // Kirim email tiket tanpa QR/barcode
-    try {
-        Mail::to($transaksi->email)->send(
-            new \App\Mail\TicketPaidMail($transaksi)
-        );
-        Log::info("Email tiket berhasil dikirim ke {$transaksi->email}");
-    } catch (\Exception $e) {
-        Log::error("Gagal kirim email ke {$transaksi->email}: " . $e->getMessage());
-    }
+        foreach ($transaksi->details as $detail) {
+            if (!$detail->kode_tiket) {
+                $detail->kode_tiket = strtoupper(Str::random(8));
+                $detail->save();
+            }
+        }
 
-    return view('checkout.success', compact('transaksi'));
-}
+        try {
+            Mail::to($transaksi->email)->send(
+                new \App\Mail\TicketPaidMail($transaksi)
+            );
+            Log::info("Email tiket berhasil dikirim ke {$transaksi->email}");
+        } catch (\Exception $e) {
+            Log::error("Gagal kirim email ke {$transaksi->email}: " . $e->getMessage());
+        }
+
+        return view('checkout.success', compact('transaksi'));
+    }
 
     public function failed(Request $request)
     {
@@ -427,10 +408,11 @@ public function success(Request $request)
             'message' => "Status transaksi {$orderId} berhasil diubah menjadi {$status}"
         ]);
     }
-    public function showTiket($id)
-{
-    $transaksi = \App\Models\Transaksi::with('detailTransaksi.ticket')->findOrFail($id);
 
-    return view('tiket.show', compact('transaksi'));
-}
+    public function showTiket($id)
+    {
+        $transaksi = \App\Models\Transaksi::with('detailTransaksi.ticket')->findOrFail($id);
+
+        return view('tiket.show', compact('transaksi'));
+    }
 }

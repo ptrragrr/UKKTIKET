@@ -35,7 +35,7 @@
       {{-- Ringkasan Pembelian --}}
       @foreach($keranjang as $item)
         <div class="summary-item">
-          <span>{{ $item['ticket']->konser->nama_konser }} - {{ $item['ticket']->jenis_tiket }}</span>
+          <span>{{ $item['ticket']->nama_event }} - {{ $item['ticket']->jenis_tiket }}</span>
           <span>Rp {{ number_format($item['ticket']->harga_tiket, 0, ',', '.') }} × {{ $item['qty'] }}</span>
         </div>
       @endforeach

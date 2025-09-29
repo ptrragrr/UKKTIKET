@@ -28,7 +28,7 @@
             <ul>
                 @foreach($transaksi->details as $detail)
                     <li>
-                        {{ $detail->ticket->konser->nama_konser }} - {{ $detail->ticket->jenis_tiket }}
+                        {{ $detail->ticket->nama_event }} - {{ $detail->ticket->jenis_tiket }}
                         (x{{ $detail->jumlah }}) |
                         Kode Tiket: <strong>{{ $detail->kode_tiket ?? 'Belum digenerate' }}</strong>
                     </li>
